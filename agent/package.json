@@ -10,7 +10,8 @@
     "pyth-probe": "tsx scripts/pyth-probe.ts",
     "pyth-pusher": "tsx scripts/pyth-pusher.ts",
     "nudge-price": "tsx scripts/nudge-price.ts",
-    "price-driver": "tsx scripts/price-driver.ts"
+    "price-driver": "tsx scripts/price-driver.ts",
+    "demo:harvest": "concurrently --names \"tick,vol\" --prefix-colors \"magenta,cyan\" --kill-others --restart-tries 0 \"tsx run.ts\" \"tsx scripts/price-driver.ts\""
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "concurrently": "^10.0.3",
     "tsx": "^4.22.4",
     "typescript": "^5.6.0"
   }
