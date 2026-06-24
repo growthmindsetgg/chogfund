@@ -74,8 +74,8 @@ contract SwapHarness is SafeSwapExecutor, ReentrancyGuard {
         address tokenOut,
         uint256 amountIn,
         uint256 minOut
-    ) external nonReentrant returns (uint256) {
-        return _safeSwap(router, callData, tokenIn, tokenOut, amountIn, minOut);
+    ) external nonReentrant returns (uint256 amountOut) {
+        (, amountOut) = _safeSwap(router, callData, tokenIn, tokenOut, amountIn, minOut);
     }
 
     receive() external payable {}

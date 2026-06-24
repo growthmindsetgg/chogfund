@@ -103,7 +103,7 @@ abstract contract SafeSwapExecutor {
         address tokenOut,
         uint256 amountIn,
         uint256 minOut
-    ) internal returns (uint256 amountOut) {
+    ) internal returns (uint256 spent, uint256 amountOut) {
         if (!routerWhitelist[router]) revert RouterNotWhitelisted(router);
 
         uint256 inBefore = _balanceOf(tokenIn);
@@ -127,7 +127,7 @@ abstract contract SafeSwapExecutor {
         uint256 inAfter = _balanceOf(tokenIn);
         uint256 outAfter = _balanceOf(tokenOut);
 
-        uint256 spent = inBefore - inAfter;
+        spent = inBefore - inAfter;
         amountOut = outAfter - outBefore;
 
         if (amountOut < minOut) revert MinOutNotMet(amountOut, minOut);
