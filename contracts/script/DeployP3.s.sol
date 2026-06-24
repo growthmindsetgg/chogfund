@@ -34,8 +34,10 @@ contract DeployP3 is Script {
     uint256 constant SLIPPAGE_BPS = 50;
 
     uint256 constant SEED_DEAD     = 1e6;       // 1 USDC seeded to dead address
-    uint256 constant ROUTER_USDC   = 1_000e6;   // mock-router USDC liquidity
-    uint256 constant ROUTER_MON    = 1 ether;   // mock-router MON liquidity
+    uint256 constant ROUTER_USDC   = 1_000e6;   // mock-router USDC liquidity (free mint)
+    // MON router liquidity is funded SEPARATELY from the agent account (13 MON) post-deploy,
+    // because the deployer (1.83 MON) must reserve its balance for deployment gas (~1.2 MON).
+    uint256 constant ROUTER_MON    = 0;
     address constant DEAD          = 0x000000000000000000000000000000000000dEaD;
 
     function run() external {
@@ -59,10 +61,12 @@ contract DeployP3 is Script {
         IERC20(USDC).approve(address(vault), SEED_DEAD);
         vault.deposit(SEED_DEAD, DEAD);
 
-        // fund the mock router so it can actually swap during e2e
+        // fund the mock router USDC liquidity (MON funded separately from agent post-deploy)
         IMintableUSDC(USDC).mint(address(router), ROUTER_USDC);
-        (bool ok, ) = address(router).call{value: ROUTER_MON}("");
-        require(ok, "router MON fund failed");
+        if (ROUTER_MON > 0) {
+            (bool ok, ) = address(router).call{value: ROUTER_MON}("");
+            require(ok, "router MON fund failed");
+        }
 
         vm.stopBroadcast();
 

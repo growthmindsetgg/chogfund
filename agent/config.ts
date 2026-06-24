@@ -19,6 +19,8 @@ export interface Addresses {
   PythPriceReader?: `0x${string}`;
   HardenedVault?: `0x${string}`;
   swapRouter?: `0x${string}`;
+  LogBookP3?: `0x${string}`;
+  _retired?: string[];
   agent: `0x${string}`;
   demoUser: `0x${string}`;
   deployer: `0x${string}`;
