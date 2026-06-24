@@ -12,7 +12,8 @@
     "dry-run": "tsx scripts/dry-run-tick.ts",
     "nudge-price": "tsx scripts/nudge-price.ts",
     "price-driver": "tsx scripts/price-driver.ts",
-    "demo:harvest": "concurrently --names \"tick,vol\" --prefix-colors \"magenta,cyan\" --kill-others --restart-tries 0 \"tsx run.ts\" \"tsx scripts/price-driver.ts\""
+    "demo:harvest": "concurrently --names \"tick,vol\" --prefix-colors \"magenta,cyan\" --kill-others --restart-tries 0 \"tsx run.ts\" \"tsx scripts/price-driver.ts\"",
+    "e2e:step7": "tsx scripts/e2e-step7.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

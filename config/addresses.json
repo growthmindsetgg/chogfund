@@ -26,7 +26,7 @@
   "monUsdFeedId": "0x31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1",
   "monUsdFeedIdBeta": "0xe786153cc54abd4b0e53b4c246d54d9f8eb3f3b5a34d4fc5a2e9a423b0ba5d6b",
   "slippageBps": 50,
-  "maxAgeSec": 60,
+  "maxAgeSec": 300,
   "confThresholdBps": 100,
   "p3DeployBlock": 40281380
 }
