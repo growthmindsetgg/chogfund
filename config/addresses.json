@@ -28,5 +28,35 @@
   "slippageBps": 50,
   "maxAgeSec": 300,
   "confThresholdBps": 100,
-  "p3DeployBlock": 40281380
+  "p3DeployBlock": 40281380,
+  "p4": {
+    "_note": "P4 allocator deploy on Monad testnet. ALL Uniswap/ERC4626 venues are MOCKS with settable state. Real Uniswap concentrated-liquidity math, real ERC4626 vault behavior, real slippage/liquidity, and real LP valuation are validated at the MAINNET CANARY (P7). Do NOT treat mock-green as real integration.",
+    "deployBlock": 40458574,
+    "deployer": "0xCBdfd84386524b2b9B5F2548FD0d146d3771b48e",
+    "agent": "0xd461546Fcc49bcB73C78E9931FD64498ccEa48Ce",
+    "AllocatorVault": "0xaB17208f96b1866ed16C270fAce5eA341315769c",
+    "LpManager": "0x0E27DD673F461335e4E6bB3efFD97EDAC24F9A44",
+    "VaultRouter": "0xE734c1c8d52CbC8110FfCA4436902A68F3c9F764",
+    "HealthMonitor": "0x9c366DEee4566e87181626612D3D86f32B709499",
+    "PythPriceReaderP4": "0x97ebe97e4e56ecb71D84A5cBFf58D1F345E4b0A1",
+    "LogBookP4": "0xD2178DaeD05513D13cCa717Bd7Dcfd49a213504d",
+    "swapRouter": "0x890aBBe3BF290a70727d138860aD33f50ECC82eF",
+    "mocks": {
+      "MockWMON": "0x20D960FA85eD138dcB6F4E71f099BEE3ef0103f2",
+      "MockUniV3Pool": "0xD5a950fBc2246155Ea63922B2165Ac8A4A9A4Edc",
+      "MockUniV3PositionManager": "0x87ee930630e4c675358C84BECE5b68098D939aEB",
+      "MockERC4626_usdcA": "0x683Be5F00e17f53f183eb5D87418caAd5F7ED6dc",
+      "MockERC4626_usdcB": "0xCA42315316c3DD09D52c163b94f1FFA3659dea08",
+      "MockERC4626_monA": "0x289aF7833227A948B3D69995fdE68A49045FE944",
+      "MockERC4626_monB": "0xb0d226C16629405Cc6F5855b7d278cEa73b2ea5C"
+    },
+    "config": {
+      "poolFee": 3000,
+      "tickSpacing": 60,
+      "readerMaxAgeSec": 172800,
+      "readerMaxAgeNote": "demo tolerance for the keeperless testnet feed; production reuses the P3 tight-maxAge + Hermes push",
+      "slippageBps": 50,
+      "monitorThresholds": { "utilCautionBps": 7000, "utilStressBps": 9000, "pegStressBps": 9700, "pegEmergencyBps": 9000 }
+    }
+  }
 }
