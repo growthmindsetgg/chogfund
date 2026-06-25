@@ -47,8 +47,10 @@ contract HardenedVault is ERC4626, ReentrancyGuard, SafeSwapExecutor {
     bool public paused;
 
     // ----- internal accounting (donation-resistant). NEVER read balanceOf for NAV. -----
-    uint256 private _trackedUsdc; // 6 dec
-    uint256 private _trackedMon;  // wei (18 dec)
+    // `internal` so allocator subclasses (P4) can move base assets into legs and back
+    // while keeping totalAssets()/redeemInKind the single source of truth.
+    uint256 internal _trackedUsdc; // 6 dec
+    uint256 internal _trackedMon;  // wei (18 dec)
 
     uint256 public constant BPS_TARGET = 6000; // 60% MON
     uint256 public constant BPS_BAND = 500;    // ±5%
@@ -94,12 +96,33 @@ contract HardenedVault is ERC4626, ReentrancyGuard, SafeSwapExecutor {
 
     // ----- NAV (internal accounting only) -----
 
-    /// @notice NAV in USDC terms (6 dec) = tracked USDC + tracked MON valued at fresh Pyth price.
+    /// @notice NAV in USDC terms (6 dec) = tracked USDC + tracked MON valued at fresh
+    ///         Pyth price + the value of any allocator legs (LP / parked vaults — P4).
     ///         Reads tracked balances, NOT balanceOf → donations cannot move share price.
     function totalAssets() public view override returns (uint256) {
-        if (_trackedMon == 0) return _trackedUsdc;
-        uint256 p = priceReader.readPriceE8(); // reverts if stale / low-confidence
-        return _trackedUsdc + _trackedMon * p / 1e20; // 18 + 8 - 20 = 6 dec
+        uint256 nav = _trackedUsdc;
+        if (_trackedMon != 0) {
+            uint256 p = priceReader.readPriceE8(); // reverts if stale / low-confidence
+            nav += _trackedMon * p / 1e20;         // 18 + 8 - 20 = 6 dec
+        }
+        return nav + _legsValueUsdc(); // each extra leg counted exactly once (default 0)
+    }
+
+    // ----- allocator-leg hooks (P4). Default: no extra legs → identical P3 behavior. -----
+
+    /// @dev USDC-6dec value of every extra allocator leg (LP position, parked vault
+    ///      shares). Overridden by AllocatorVault. MUST count each leg exactly once.
+    function _legsValueUsdc() internal view virtual returns (uint256) { return 0; }
+
+    /// @dev Unwind `shares/supply` of every allocator leg back into THIS vault as base
+    ///      USDC + native MON, returning the amounts to forward to the redeemer.
+    ///      Default no-op (P3 two-leg vault). Override pulls LP / parked pro-rata.
+    function _unwindLegs(uint256 /*shares*/, uint256 /*supply*/)
+        internal
+        virtual
+        returns (uint256 usdcFromLegs, uint256 monFromLegs)
+    {
+        return (0, 0);
     }
 
     function trackedUsdc() external view returns (uint256) { return _trackedUsdc; }
@@ -160,14 +183,22 @@ contract HardenedVault is ERC4626, ReentrancyGuard, SafeSwapExecutor {
         if (shares == 0) revert ZeroShares();
         uint256 supply = totalSupply();
 
-        // pro-rata of tracked assets (rounds down → dust stays in vault, never over-pays)
-        usdcOut = _trackedUsdc * shares / supply;
-        monOut  = _trackedMon  * shares / supply;
+        // base pro-rata of tracked assets (rounds down → dust stays in vault, never over-pays)
+        uint256 baseUsdc = _trackedUsdc * shares / supply;
+        uint256 baseMon  = _trackedMon  * shares / supply;
 
-        // ---- effects ----
+        // ---- effects (base accounting) ----
         _burn(msg.sender, shares);
-        _trackedUsdc -= usdcOut;
-        _trackedMon  -= monOut;
+        _trackedUsdc -= baseUsdc;
+        _trackedMon  -= baseMon;
+
+        // ---- unwind allocator legs pro-rata INTO this vault (native MON + USDC) ----
+        // Uses the PRE-burn `supply`. Default no-op for the P3 vault. Same rounding
+        // (down) as the base legs, so a redemption never over-pays any leg.
+        (uint256 usdcLeg, uint256 monLeg) = _unwindLegs(shares, supply);
+
+        usdcOut = baseUsdc + usdcLeg;
+        monOut  = baseMon  + monLeg;
 
         // ---- interactions ----
         if (usdcOut > 0) IERC20(asset()).safeTransfer(receiver, usdcOut);
