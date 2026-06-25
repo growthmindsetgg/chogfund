@@ -8,6 +8,7 @@ import {HardenedVault, ILogBook} from "./HardenedVault.sol";
 import {PythPriceReader} from "./PythPriceReader.sol";
 import {LpManager} from "./LpManager.sol";
 import {VaultRouter} from "./VaultRouter.sol";
+import {HealthMonitor} from "./HealthMonitor.sol";
 
 interface IWMON {
     function deposit() external payable;
@@ -38,12 +39,16 @@ contract AllocatorVault is HardenedVault {
     IWMON public immutable wmon;
     LpManager public lpManager;
     VaultRouter public vaultRouter;
+    HealthMonitor public healthMonitor;
 
     event LpManagerSet(address indexed lpManager);
     event VaultRouterSet(address indexed vaultRouter);
+    event HealthMonitorSet(address indexed healthMonitor);
     event ParkedToVault(address indexed erc4626, uint256 monIn, uint256 usdcIn, uint256 navBefore, uint256 navAfter);
     event UnparkedToBase(address indexed erc4626, uint256 shares, uint256 assetsOut);
     event RotatedParked(address indexed from, address indexed to, uint256 shares, uint256 navBefore, uint256 navAfter);
+    event FledToBackup(address indexed primary, address indexed backup, uint256 shares, uint256 navBefore, uint256 navAfter);
+    event EmergencyExit(address indexed caller, address indexed triggerVenue, uint256 monToBase, uint256 usdcToBase);
     event AllocatedToLp(uint256 priceE8, uint256 monIn, uint256 usdcIn, int24 tickLower, int24 tickUpper, uint256 navBefore, uint256 navAfter);
     event LpRangeShifted(uint256 priceE8, int24 tickLower, int24 tickUpper, uint256 navBefore, uint256 navAfter);
     event LpFeesCollected(uint256 wmonToBase, uint256 usdcToBase);
@@ -55,6 +60,13 @@ contract AllocatorVault is HardenedVault {
     error RotationNotWorthwhile();
     error AssetClassMismatch();
     error AllocSlippage(uint256 navAfter, uint256 floor);
+    error HealthMonitorAlreadySet();
+    error MonitorUnset();
+    error StopAdding();      // CAUTION+ : venue no longer accepts additions
+    error NotStressed();     // primary isn't STRESS+ : nothing to flee
+    error BackupUnsafe();    // backup is itself STRESS+ : refuse to flee into it
+    error NoEmergency();     // agent path requires a real EMERGENCY signal
+    error NotAuthorized();
 
     constructor(
         IERC20 usdcToken,
@@ -81,6 +93,19 @@ contract AllocatorVault is HardenedVault {
         require(address(_vr) != address(0), "vault: zero router");
         vaultRouter = _vr;
         emit VaultRouterSet(address(_vr));
+    }
+
+    /// @notice One-time wiring of the health monitor (owner/human action).
+    function setHealthMonitor(HealthMonitor _hm) external onlyOwner {
+        if (address(healthMonitor) != address(0)) revert HealthMonitorAlreadySet();
+        require(address(_hm) != address(0), "vault: zero monitor");
+        healthMonitor = _hm;
+        emit HealthMonitorSet(address(_hm));
+    }
+
+    modifier onlyAgentOrOwner() {
+        if (msg.sender != agent && msg.sender != owner) revert NotAuthorized();
+        _;
     }
 
     // ============================ leg hooks (override P3 defaults) ============================
@@ -238,6 +263,7 @@ contract AllocatorVault is HardenedVault {
         if (paused) revert Paused();
         if (address(vaultRouter) == address(0)) revert VaultRouterUnset();
         if (usdcAmount > _trackedUsdc) revert AmountExceedsTracked();
+        _requireHealthyToAdd(erc4626);
 
         uint256 p = priceReader.readPriceE8();
         uint256 navBefore = totalAssets();
@@ -254,6 +280,7 @@ contract AllocatorVault is HardenedVault {
         if (paused) revert Paused();
         if (address(vaultRouter) == address(0)) revert VaultRouterUnset();
         if (monAmount > _trackedMon) revert AmountExceedsTracked();
+        _requireHealthyToAdd(erc4626);
 
         uint256 p = priceReader.readPriceE8();
         uint256 navBefore = totalAssets();
@@ -326,6 +353,84 @@ contract AllocatorVault is HardenedVault {
         }
         logBook.record(p, _monBps(p, navBefore), _monBps(p, navAfter), navBefore, navAfter);
         emit RotatedParked(from, to, shares, navBefore, navAfter);
+    }
+
+    // ============================ safety / emergency-exit (P4c) ============================
+
+    /// @dev CAUTION gate: refuse to ADD to a venue that is not HEALTHY.
+    function _requireHealthyToAdd(address venue) internal view {
+        HealthMonitor hm = healthMonitor;
+        if (address(hm) != address(0) && hm.tierOf(venue) != HealthMonitor.Tier.HEALTHY) {
+            revert StopAdding();
+        }
+    }
+
+    /// @notice STRESS response: flee `shares` from a stressed `primary` venue into a
+    ///         whitelisted, NOT-stressed `backup` of the same asset class. Funds move
+    ///         only between whitelisted venues; the value is conserved within the
+    ///         slippage cap (the venue's own loss, if any, is already reflected in NAV).
+    function fleeToBackup(address primary, address backup, uint256 shares)
+        external
+        onlyAgentOrOwner
+        nonReentrant
+    {
+        if (address(vaultRouter) == address(0)) revert VaultRouterUnset();
+        if (address(healthMonitor) == address(0)) revert MonitorUnset();
+        if (vaultRouter.isMonVault(primary) != vaultRouter.isMonVault(backup)) revert AssetClassMismatch();
+        if (uint8(healthMonitor.tierOf(primary)) < uint8(HealthMonitor.Tier.STRESS)) revert NotStressed();
+        if (uint8(healthMonitor.tierOf(backup)) > uint8(HealthMonitor.Tier.CAUTION)) revert BackupUnsafe();
+
+        uint256 p = priceReader.readPriceE8();
+        uint256 navBefore = totalAssets();
+
+        bool mon = vaultRouter.isMonVault(primary);
+        uint256 assetsOut = vaultRouter.unpark(primary, shares); // → this vault
+        if (mon) IERC20(address(wmon)).safeTransfer(address(vaultRouter), assetsOut);
+        else IERC20(asset()).safeTransfer(address(vaultRouter), assetsOut);
+        vaultRouter.park(backup, assetsOut); // reverts if backup not whitelisted
+
+        uint256 navAfter = totalAssets();
+        if (navAfter < navBefore * (10_000 - slippageBps) / 10_000) {
+            revert AllocSlippage(navAfter, navBefore * (10_000 - slippageBps) / 10_000);
+        }
+        logBook.record(p, _monBps(p, navBefore), _monBps(p, navAfter), navBefore, navAfter);
+        emit FledToBackup(primary, backup, shares, navBefore, navAfter);
+    }
+
+    /// @notice EMERGENCY response: pull ALL parked funds back to base MON/USDC and
+    ///         await human review. Needs NO new destination (base is the safest place),
+    ///         so even a fully compromised agent cannot exfiltrate. The agent may call
+    ///         this only when `triggerVenue` is genuinely at EMERGENCY tier; the OWNER
+    ///         (guardian) may call it at any time with any address.
+    function emergencyExitAll(address triggerVenue) external onlyAgentOrOwner nonReentrant {
+        if (address(vaultRouter) == address(0)) revert VaultRouterUnset();
+        if (msg.sender != owner) {
+            if (address(healthMonitor) == address(0)
+                || healthMonitor.tierOf(triggerVenue) != HealthMonitor.Tier.EMERGENCY) {
+                revert NoEmergency();
+            }
+        }
+
+        (uint256 wmonOut, uint256 usdcOut) = vaultRouter.unwind(1, 1); // ALL parked → vault
+        if (wmonOut > 0) {
+            wmon.withdraw(wmonOut);
+            _trackedMon += wmonOut;
+        }
+        if (usdcOut > 0) _trackedUsdc += usdcOut;
+
+        // Robust logging even if the oracle is itself the emergency (stale price).
+        uint256 p = _tryPriceE8();
+        uint256 nav = _tryTotalAssets();
+        logBook.record(p, 0, 0, nav, nav);
+        emit EmergencyExit(msg.sender, triggerVenue, wmonOut, usdcOut);
+    }
+
+    function _tryPriceE8() internal view returns (uint256) {
+        try priceReader.readPriceE8() returns (uint256 p) { return p; } catch { return 0; }
+    }
+
+    function _tryTotalAssets() internal view returns (uint256) {
+        try this.totalAssets() returns (uint256 t) { return t; } catch { return 0; }
     }
 
     // ============================ views / tracing ============================

@@ -12,11 +12,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // ----------------- parked fixture (extends the LP fixture) -----------------
 
 contract ParkedFixture is LpFixture {
-    VaultRouter vr;
-    MockERC4626Vault usdcA;
-    MockERC4626Vault usdcB;
-    MockERC4626Vault monA;
-    MockERC4626Vault monB;
+    VaultRouter public vr;
+    MockERC4626Vault public usdcA;
+    MockERC4626Vault public usdcB;
+    MockERC4626Vault public monA;
+    MockERC4626Vault public monB;
 
     function _deployParked() internal {
         _deploy();
@@ -52,8 +52,6 @@ contract ParkedFixture is LpFixture {
         _deposit(address(0x1111), 1000e6);
         _rebalanceIntoMon(500e6);
     }
-
-    receive() external payable {}
 }
 
 // ----------------- unit tests -----------------
