@@ -16,12 +16,23 @@ export interface Addresses {
   OracleAMM: `0x${string}`;
   LogBook: `0x${string}`;
   RebalanceVault: `0x${string}`;
+  PythPriceReader?: `0x${string}`;
+  HardenedVault?: `0x${string}`;
+  swapRouter?: `0x${string}`;
+  LogBookP3?: `0x${string}`;
+  _retired?: string[];
   agent: `0x${string}`;
   demoUser: `0x${string}`;
   deployer: `0x${string}`;
   deployBlock: number;
+  pythContract?: `0x${string}`;
+  pythHermes?: string;
   pythHermesBeta: string;
   monUsdFeedId: string;
+  monUsdFeedIdBeta?: string;
+  slippageBps?: number;
+  maxAgeSec?: number;
+  confThresholdBps?: number;
 }
 
 export const ADDRESSES: Addresses = JSON.parse(
@@ -44,9 +55,16 @@ export function requireDeployed(): void {
 // RPC override (env beats addresses.json).
 export const RPC_URL: string = process.env.RPC_URL ?? ADDRESSES.rpc;
 
-// Pyth.
-export const PYTH_HERMES_URL: string = process.env.PYTH_HERMES_URL ?? ADDRESSES.pythHermesBeta;
+// Pyth — STABLE network on Monad testnet (verified in P3 STEP 1: the on-chain
+// Pyth contract accepts stable VAAs; beta is rejected with InvalidWormholeVaa).
+export const PYTH_HERMES_URL: string =
+  process.env.PYTH_HERMES_URL ?? ADDRESSES.pythHermes ?? ADDRESSES.pythHermesBeta;
 export const MON_USD_FEED_ID: string = process.env.MON_USD_FEED_ID ?? ADDRESSES.monUsdFeedId;
+export const PYTH_CONTRACT: `0x${string}` =
+  (process.env.PYTH_CONTRACT ?? ADDRESSES.pythContract ?? ZERO) as `0x${string}`;
+
+// On-chain safety params (mirror the contract defaults; agent uses for off-chain quoting).
+export const SLIPPAGE_BPS: bigint = BigInt(process.env.SLIPPAGE_BPS ?? ADDRESSES.slippageBps ?? 50);
 
 // Loop cadence.
 export const POLL_MS: number = Number(process.env.POLL_MS ?? 10_000);

@@ -21,3 +21,4 @@ agent/.writer.lock
 # IDE / OS
 .DS_Store
 *.log
+.vercel

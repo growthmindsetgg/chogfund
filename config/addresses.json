@@ -4,13 +4,29 @@
   "rpcFallback": "https://10143.rpc.thirdweb.com",
   "explorerBase": "https://testnet.monadscan.com",
   "MockUSDC": "0xAcA4F378d7b10228e83Ab7a6A38547484789EA9a",
+  "PythPriceReader": "0x944e5E17531E21E43fc8B49F126982Df0D7AcCE8",
+  "LogBookP3": "0x9FB83C86F460852b37F1aD0Bf610300E6E7322a9",
+  "swapRouter": "0x890aBBe3BF290a70727d138860aD33f50ECC82eF",
+  "HardenedVault": "0x94266394C7D4883Fe0d57c5cE9eA0969801E8C32",
   "OracleAMM": "0x733e3977FdF6504BFC0F047Eeb468C960260BA79",
   "LogBook": "0x220885f455FE78C72f02050B2Bc791B83AadF907",
   "RebalanceVault": "0xBeF5aC62EC233773B06A85fdcA6abdB30C3cFcC4",
+  "_retired": [
+    "OracleAMM",
+    "LogBook",
+    "RebalanceVault"
+  ],
   "agent": "0xd461546Fcc49bcB73C78E9931FD64498ccEa48Ce",
   "demoUser": "0xCBdfd84386524b2b9B5F2548FD0d146d3771b48e",
   "deployer": "0xCBdfd84386524b2b9B5F2548FD0d146d3771b48e",
   "deployBlock": 39424198,
+  "pythContract": "0x2880aB155794e7179c9eE2e38200202908C17B43",
+  "pythHermes": "https://hermes.pyth.network",
   "pythHermesBeta": "https://hermes-beta.pyth.network",
-  "monUsdFeedId": "0xe786153cc54abd4b0e53b4c246d54d9f8eb3f3b5a34d4fc5a2e9a423b0ba5d6b"
+  "monUsdFeedId": "0x31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1",
+  "monUsdFeedIdBeta": "0xe786153cc54abd4b0e53b4c246d54d9f8eb3f3b5a34d4fc5a2e9a423b0ba5d6b",
+  "slippageBps": 50,
+  "maxAgeSec": 300,
+  "confThresholdBps": 100,
+  "p3DeployBlock": 40281380
 }
