@@ -25,7 +25,7 @@ export function Connect() {
           A self-driving MON/USDC vault
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-balance text-lg text-[var(--text-muted)]">
-          Deposit USDC. An autonomous on-chain agent allocates across MON, USDC, an LP leg and
+          Deposit MON. An autonomous on-chain agent allocates across MON, USDC, an LP leg and
           parked yield — and proves every move on-chain. Non-custodial, withdraw any time.
         </p>
         <div className="mt-7 flex justify-center">
