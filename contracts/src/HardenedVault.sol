@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {PythPriceReader} from "./PythPriceReader.sol";
 import {SafeSwapExecutor} from "./SafeSwapExecutor.sol";
@@ -58,6 +59,7 @@ contract HardenedVault is ERC4626, ReentrancyGuard, SafeSwapExecutor {
 
     event Rebalanced(uint256 priceE8, uint256 bpsBefore, uint256 bpsAfter, bool monToUsdc, uint256 spent, uint256 received);
     event RedeemedInKind(address indexed owner, address indexed receiver, uint256 shares, uint256 usdcOut, uint256 monOut);
+    event DepositedMON(address indexed caller, address indexed receiver, uint256 monIn, uint256 priceE8, uint256 monValueUsdc, uint256 shares);
     event PausedSet(bool paused);
     event AgentSet(address indexed agent);
 
@@ -67,6 +69,7 @@ contract HardenedVault is ERC4626, ReentrancyGuard, SafeSwapExecutor {
     error Paused();
     error InKindOnly();
     error ZeroShares();
+    error ZeroDeposit();
     error NativeSendFailed();
     error AmountExceedsTracked();
     error NotRebalanceable();
@@ -150,6 +153,55 @@ contract HardenedVault is ERC4626, ReentrancyGuard, SafeSwapExecutor {
     {
         if (paused) revert Paused();
         return super.mint(shares, receiver);
+    }
+
+    /// @notice Deposit NATIVE MON and receive vault shares.
+    /// @dev Unlike the USDC path, this values the deposit through the oracle, so it
+    ///      uses the UPDATE-THEN-MINT pattern: the caller supplies the latest Hermes
+    ///      `priceUpdate`, which is pushed on-chain in THIS tx, so the price is fresh
+    ///      by construction (closes the stale-price dilution surface — see design).
+    ///      `msg.value` = the Pyth update fee + the MON being deposited.
+    ///
+    ///      Shares are computed against NAV-BEFORE-credit via the inherited ERC4626
+    ///      `_convertToShares` (same virtual-shares / decimals-offset inflation guard
+    ///      the USDC path uses), then the MON is tracked and shares minted. CEI: the
+    ///      only external call (the trusted price push) happens before any effects;
+    ///      `_mint` has no receiver callback and no native MON is sent out, so there
+    ///      is no reentrancy vector (and `nonReentrant` guards regardless).
+    /// @param priceUpdate Hermes update data (bytes[]) for the MON/USD feed.
+    /// @param receiver    recipient of the minted shares.
+    /// @return shares     shares minted to `receiver`.
+    function depositMON(bytes[] calldata priceUpdate, address receiver)
+        external
+        payable
+        nonReentrant
+        notAgent
+        returns (uint256 shares)
+    {
+        if (paused) revert Paused();
+
+        // 1) Push fresh Pyth data in THIS tx (trusted external call). Pay the EXACT
+        //    fee so the reader's excess-refund .call never fires.
+        uint256 fee = priceReader.getUpdateFee(priceUpdate);
+        if (msg.value <= fee) revert ZeroDeposit(); // must leave > 0 MON after the fee
+        priceReader.updatePrice{value: fee}(priceUpdate);
+        uint256 monIn = msg.value - fee;
+
+        // 2) Fresh, guarded price (staleness + confidence + non-positive enforced in
+        //    readPriceE8). monValue in 6-dec USDC terms: 18 + 8 - 20 = 6.
+        uint256 p = priceReader.readPriceE8();
+        uint256 monValue = monIn * p / 1e20;
+        if (monValue == 0) revert ZeroDeposit();
+
+        // 3) Shares vs NAV-BEFORE-credit, with the ERC4626 virtual-offset guard.
+        shares = _convertToShares(monValue, Math.Rounding.Floor);
+        if (shares == 0) revert ZeroShares();
+
+        // 4) EFFECTS last. Native MON rests in the vault, tracked like rebalance MON;
+        //    redeemInKind already pays it back pro-rata.
+        _trackedMon += monIn;
+        _mint(receiver, shares);
+        emit DepositedMON(msg.sender, receiver, monIn, p, monValue, shares);
     }
 
     /// @dev Shares are computed (in super.deposit/mint) from NAV BEFORE this runs;
