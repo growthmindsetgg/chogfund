@@ -4,17 +4,19 @@ import { useMemo, useState } from "react";
 import { useAccount, usePublicClient } from "wagmi";
 import { toast } from "sonner";
 import addresses from "@addresses";
-import { allocatorAbi, usdcAbi } from "@/abi";
+import { allocatorAbi, pythReaderAbi } from "@/abi";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAllocatorSnapshot } from "@/hooks/useAllocatorSnapshot";
 import { useSendTransactionSync } from "@/hooks/useSendTransactionSync";
-import { cn, formatMON, formatUSDC, parseUSDCInput } from "@/lib/utils";
+import { fetchMonUsdUpdateData } from "@/lib/pythUpdate";
+import { cn, formatMON, formatUSDC, parseMONInput } from "@/lib/utils";
 import { classifyTxError } from "@/lib/tx";
 
 const VAULT = addresses.AllocatorVault as `0x${string}`;
-const USDC = addresses.MockUSDC as `0x${string}`;
+const READER = addresses.PythPriceReader as `0x${string}`;
+const GAS_PAD_WEI = 10_000_000_000_000_000n; // 0.01 MON kept back for gas + oracle fee
 
 type Tab = "deposit" | "withdraw";
 
@@ -74,65 +76,82 @@ type FormProps = {
 
 function DepositForm({ snap, tx, refetch, address, publicClient }: FormProps) {
   const [str, setStr] = useState("");
-  const amount = useMemo(() => parseUSDCInput(str), [str]);
-  const allowance = snap?.userUsdcAllowance ?? 0n;
-  const balance = snap?.userUsdcBalance ?? 0n;
+  const [preparing, setPreparing] = useState(false);
+  const monIn = useMemo(() => parseMONInput(str), [str]);
+  const balance = snap?.userMonBalance ?? 0n;
 
-  const needsApprove = amount > 0n && allowance < amount;
-  const overBalance = amount > balance;
+  // need room for the deposit + gas + the tiny oracle fee
+  const overBalance = monIn > 0n && monIn + GAS_PAD_WEI > balance;
+  const onMax = () => setStr(formatMON(balance > GAS_PAD_WEI ? balance - GAS_PAD_WEI : 0n, 4));
 
-  const onMax = () => setStr(formatUSDC(balance, 2));
-
-  const approve = async () => {
-    if (!publicClient || amount === 0n) return;
-    try {
-      await publicClient.simulateContract({
-        address: USDC, abi: usdcAbi, functionName: "approve", args: [VAULT, amount], account: address,
-      });
-    } catch (e) { toast.error(classifyTxError(e).message); return; }
-    try {
-      const receipt = await tx.send({ address: USDC, abi: usdcAbi, functionName: "approve", args: [VAULT, amount] });
-      if (receipt.status !== "success") { toast.error("Approve reverted on-chain."); return; }
-      await refetch();
-      toast.success("USDC approved. You can deposit now.");
-    } catch (e) { toast.error(classifyTxError(e).message); }
-  };
+  const busy = preparing || tx.loading;
 
   const deposit = async () => {
-    if (!publicClient || amount === 0n) { toast.error("Enter an amount"); return; }
-    // Pre-flight simulate: agent wallet hits AgentBlocked here, never reaches signing.
+    if (!publicClient) return;
+    if (monIn === 0n) { toast.error("Enter a MON amount"); return; }
+    if (overBalance) { toast.error("Leave a little MON for gas"); return; }
+
+    setPreparing(true);
+    let updateData: `0x${string}`[];
+    let fee: bigint;
+    try {
+      // fresh stable-Hermes VAA + its on-chain update fee (update-then-mint)
+      updateData = await fetchMonUsdUpdateData();
+      fee = (await publicClient.readContract({
+        address: READER, abi: pythReaderAbi, functionName: "getUpdateFee", args: [updateData],
+      })) as bigint;
+    } catch {
+      setPreparing(false);
+      toast.error("Couldn't fetch the live price update. Try again.");
+      return;
+    }
+
+    const value = monIn + fee; // depositMON splits: fee → Pyth, remainder → your deposit
+
+    // Pre-flight simulate: agent wallet hits AgentBlocked here, stale price → price-unset, etc.
     try {
       await publicClient.simulateContract({
-        address: VAULT, abi: allocatorAbi, functionName: "deposit", args: [amount, address], account: address,
+        address: VAULT, abi: allocatorAbi, functionName: "depositMON",
+        args: [updateData, address], value, account: address,
       });
-    } catch (e) { toast.error(classifyTxError(e).message); return; }
+    } catch (e) {
+      setPreparing(false);
+      toast.error(classifyTxError(e).message);
+      return;
+    }
+    setPreparing(false);
+
     try {
-      const receipt = await tx.send({ address: VAULT, abi: allocatorAbi, functionName: "deposit", args: [amount, address] });
+      const receipt = await tx.send({
+        address: VAULT, abi: allocatorAbi, functionName: "depositMON",
+        args: [updateData, address], value,
+      });
       if (receipt.status !== "success") { toast.error("Deposit reverted on-chain."); return; }
       setStr("");
       await refetch();
-      toast.success("Deposit confirmed.");
-    } catch (e) { toast.error(classifyTxError(e).message); }
+      toast.success("MON deposited.");
+    } catch (e) {
+      toast.error(classifyTxError(e).message);
+    }
   };
-
-  const disabled = tx.loading || amount === 0n || overBalance;
-  const label = tx.loading ? "Confirming…" : needsApprove ? "Approve USDC" : "Deposit USDC";
-  const onClick = needsApprove ? approve : deposit;
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--text-muted)]">
-        Deposit USDC. The agent allocates it across the 60/40 MON/USDC mix, the LP leg and parked yield — and rebalances
-        automatically. Withdraw your share any time.
+        Deposit MON. The agent values it at the live Pyth price and allocates across the 60/40 MON/USDC mix,
+        the LP leg and parked yield — rebalancing automatically. Withdraw your share any time.
       </p>
-      <AmountField label="USDC" value={str} onChange={setStr} balanceLabel={`${formatUSDC(balance, 2)} USDC`} onMax={onMax} />
-      {overBalance && <p className="text-xs text-[var(--rose)]">Amount exceeds your USDC balance.</p>}
+      <AmountField label="MON" value={str} onChange={setStr} balanceLabel={`${formatMON(balance, 4)} MON`} onMax={onMax} />
+      {overBalance && <p className="text-xs text-[var(--rose)]">Leave a little MON for gas + the oracle fee.</p>}
 
-      <Button onClick={onClick} disabled={disabled} size="lg" className="w-full">{label}</Button>
+      <Button onClick={deposit} disabled={busy || monIn === 0n || overBalance} size="lg" className="w-full">
+        {preparing ? "Fetching live price…" : tx.loading ? "Confirming…" : "Deposit MON"}
+      </Button>
 
-      {needsApprove && !tx.loading && (
-        <p className="text-center text-xs text-[var(--text-muted)]">Two steps: approve USDC once, then deposit.</p>
-      )}
+      <p className="text-center text-xs text-[var(--text-muted)]">
+        Your deposit includes a tiny on-chain oracle fee (a fresh Pyth price update, ~a few wei) so your MON is
+        valued at the live price the moment you deposit.
+      </p>
     </div>
   );
 }
@@ -174,7 +193,7 @@ function WithdrawForm({ snap, tx, refetch, address, publicClient }: FormProps) {
   if (userShares === 0n) {
     return (
       <div className="py-10 text-center text-sm text-[var(--text-muted)]">
-        No position yet. Deposit USDC to get started.
+        No position yet. Deposit MON to get started.
       </div>
     );
   }
