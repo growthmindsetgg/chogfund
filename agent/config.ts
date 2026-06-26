@@ -20,6 +20,16 @@ export interface Addresses {
   HardenedVault?: `0x${string}`;
   swapRouter?: `0x${string}`;
   LogBookP3?: `0x${string}`;
+  // P4 allocator set (live-loop target). Mocks/config sub-objects intentionally untyped.
+  p4?: {
+    AllocatorVault: `0x${string}`;
+    LpManager: `0x${string}`;
+    VaultRouter: `0x${string}`;
+    HealthMonitor: `0x${string}`;
+    PythPriceReaderP4: `0x${string}`;
+    LogBookP4: `0x${string}`;
+    swapRouter: `0x${string}`;
+  };
   _retired?: string[];
   agent: `0x${string}`;
   demoUser: `0x${string}`;
@@ -52,6 +62,28 @@ export function requireDeployed(): void {
   }
 }
 
+// ── P4 live-loop target ──────────────────────────────────────────────────────
+// The agent loop drives the P4 AllocatorVault: pushes price through
+// PythPriceReaderP4 and rebalances the AllocatorVault (which writes LogBookP4).
+// We resolve the active target from the p4 block, falling back to P3/P1 so the
+// loop still has SOMETHING to point at on older configs.
+export const P4 = ADDRESSES.p4;
+
+export const TARGET = {
+  vault:      (P4?.AllocatorVault    ?? ADDRESSES.HardenedVault ?? ADDRESSES.RebalanceVault) as `0x${string}`,
+  reader:     (P4?.PythPriceReaderP4 ?? ADDRESSES.PythPriceReader ?? ZERO) as `0x${string}`,
+  swapRouter: (P4?.swapRouter        ?? ADDRESSES.swapRouter ?? ZERO) as `0x${string}`,
+  logBook:    (P4?.LogBookP4         ?? ADDRESSES.LogBookP3 ?? ADDRESSES.LogBook) as `0x${string}`,
+  set: (P4 ? "P4-AllocatorVault" : ADDRESSES.HardenedVault ? "P3-HardenedVault" : "P1-RebalanceVault") as string,
+} as const;
+
+// The live loop refuses to start unless the P4 allocator + its reader are set.
+export function requireP4Deployed(): void {
+  if (!P4 || P4.AllocatorVault.toLowerCase() === ZERO || P4.PythPriceReaderP4.toLowerCase() === ZERO) {
+    throw new Error("config/addresses.json has no p4.AllocatorVault / p4.PythPriceReaderP4. Run the P4 deploy first.");
+  }
+}
+
 // RPC override (env beats addresses.json).
 export const RPC_URL: string = process.env.RPC_URL ?? ADDRESSES.rpc;
 
@@ -66,8 +98,13 @@ export const PYTH_CONTRACT: `0x${string}` =
 // On-chain safety params (mirror the contract defaults; agent uses for off-chain quoting).
 export const SLIPPAGE_BPS: bigint = BigInt(process.env.SLIPPAGE_BPS ?? ADDRESSES.slippageBps ?? 50);
 
-// Loop cadence.
+// Loop cadence — how often the loop reads price/portfolio and decides.
 export const POLL_MS: number = Number(process.env.POLL_MS ?? 10_000);
+
+// Pyth keeper cadence — the loop pushes a fresh price on-chain AT LEAST this
+// often even when no rebalance is due, so readPriceE8 never goes stale. Default
+// 10 min — well under the 48h reader maxAge, and a comfortable freshness margin.
+export const KEEPER_PUSH_MS: number = Number(process.env.KEEPER_PUSH_MS ?? 10 * 60_000);
 
 // Monad testnet chain. Multicall left undefined on purpose (testnet has no Multicall3).
 export const monadTestnet = defineChain({

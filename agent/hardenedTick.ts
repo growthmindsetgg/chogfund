@@ -102,7 +102,7 @@ export function planSwap(p: Portfolio, priceE8: bigint): {
   return null;
 }
 
-function buildRouterCalldata(monToUsdc: boolean, grossOut: bigint, amountIn: bigint): `0x${string}` {
+export function buildRouterCalldata(monToUsdc: boolean, grossOut: bigint, amountIn: bigint): `0x${string}` {
   const usdc = ADDRESSES.MockUSDC;
   // MockSwapRouter.swap(tokenIn, tokenOut, pullIn, pushOut). pushOut is the route's
   // quoted output; in production it comes from the DEX/aggregator route. For the
