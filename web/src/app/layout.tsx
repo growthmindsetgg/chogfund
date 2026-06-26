@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
+// Inter is a variable font — next/font loads the full 100–900 weight axis, so
+// 400/500/600/700/800/900 are all available (heavy 800/900 for display headings).
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 const jbmono = JetBrains_Mono({
@@ -14,8 +18,8 @@ const jbmono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chog Vault",
-  description: "Non-custodial 60/40 MON/USDC vault rebalanced by an autonomous on-chain agent.",
+  title: "chogfund",
+  description: "Non-custodial MON/USDC allocator vault, rebalanced by an autonomous on-chain agent. Monad testnet.",
   generator: "monskills",
 };
 
@@ -23,7 +27,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${jakarta.variable} ${jbmono.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} ${jbmono.variable} h-full`}>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>

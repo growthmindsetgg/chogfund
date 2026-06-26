@@ -27,7 +27,7 @@ export const monadTestnet = defineChain({
 // Single wagmi/RainbowKit config. multicall disabled on the client; viem will
 // fan out individual reads even when wagmi tries to batch.
 export const config = getDefaultConfig({
-  appName: "Chog Vault",
+  appName: "chogfund",
   // RainbowKit requires a projectId for WalletConnect; placeholder is fine for
   // testnet (WalletConnect just won't initialize without a real one).
   projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "chog-vault-demo",

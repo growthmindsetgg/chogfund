@@ -3,23 +3,37 @@
 /* RainbowKit base styles */
 @import "@rainbow-me/rainbowkit/styles.css";
 
-/* Chog Vault light-purple design tokens. */
+/* ─────────────────────────────────────────────────────────────────────────
+   Chog Vault — Monad design tokens (P8).
+   Palette: Blue #200052 · Purple #836EF9 · Off-white #FBFAF9 · Berry #A0055D.
+   Typeface: Inter.
+   ───────────────────────────────────────────────────────────────────────── */
 :root {
-  --bg: #F6F5FB;
-  --card: #FFFFFF;
-  --text: #1B1930;
-  --text-muted: #6B6880;
-  --purple: #6B5CF0;
-  --purple-strong: #4B3FC4;
-  --purple-soft: #EFEDFE;
-  --hodl: #A8A6B8;
-  --green: #1FB57A;
-  --rose: #F0526B;
-  --border: #E7E5F4;
+  /* ── Official Monad brand (exact hexes) ── */
+  --blue: #200052;        /* deep panels / NAV card / dark surfaces */
+  --purple: #836EF9;      /* primary accent, buttons, active */
+  --offwhite: #FBFAF9;    /* page bg / cards */
+  --berry: #A0055D;       /* secondary accent (e.g. USDC leg) */
+  --black: #0E100F;       /* primary text on light */
+
+  /* ── Semantic roles mapped onto the brand ── */
+  --bg: #FBFAF9;          /* offwhite */
+  --card: #FFFFFF;        /* light surface */
+  --text: #0E100F;        /* black */
+  --text-muted: #6B6770;  /* neutral muted grey (not a brand hue) */
+
+  --purple-strong: #200052;      /* strong accent / hover → brand blue */
+  --purple-soft: #EFECFE;        /* light tint of --purple — fills, chips, inputs */
+  --purple-soft-strong: #E3DDFB; /* deeper tint of --purple — chip hover */
+
+  --green: #12A07A;       /* positive / active (semantic, not brand) */
+  --rose: #A0055D;        /* negative → berry */
+  --hodl: #B6B2C9;        /* neutral / muted line */
+  --border: #ECE7F3;      /* hairline */
 
   --radius-card: 20px;
-  --shadow-card: 0 10px 30px -12px rgba(75, 63, 196, 0.10),
-                 0 2px 6px -2px rgba(75, 63, 196, 0.08);
+  --shadow-card: 0 10px 30px -12px rgba(32, 0, 82, 0.12),
+                 0 2px 6px -2px rgba(32, 0, 82, 0.08);
 }
 
 @theme inline {
@@ -27,14 +41,19 @@
   --color-foreground: var(--text);
   --color-card:       var(--card);
   --color-muted:      var(--text-muted);
+  --color-blue:          var(--blue);
+  --color-berry:         var(--berry);
+  --color-black:         var(--black);
+  --color-offwhite:      var(--offwhite);
   --color-purple:        var(--purple);
   --color-purple-strong: var(--purple-strong);
   --color-purple-soft:   var(--purple-soft);
-  --color-hodl: var(--hodl);
+  --color-purple-soft-strong: var(--purple-soft-strong);
   --color-green: var(--green);
-  --color-rose: var(--rose);
+  --color-rose:  var(--rose);
+  --color-hodl:  var(--hodl);
   --color-border: var(--border);
-  --font-sans: var(--font-jakarta);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-jbmono);
   --radius-card: var(--radius-card);
 }
@@ -42,39 +61,34 @@
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-jakarta), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 * { box-sizing: border-box; }
 
+/* Subtle Monad gradient wash behind the app. */
+.monad-wash {
+  background:
+    radial-gradient(1100px 520px at 12% -8%, rgba(131, 110, 249, 0.10), transparent 60%),
+    radial-gradient(900px 480px at 100% 0%, rgba(160, 5, 93, 0.06), transparent 55%),
+    var(--bg);
+}
+
 /* Pulsing dot for the agent status card. */
 @keyframes pulse-purple {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(107, 92, 240, 0.55); }
-  50%      { box-shadow: 0 0 0 8px rgba(107, 92, 240, 0.0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(131, 110, 249, 0.55); }
+  50%      { box-shadow: 0 0 0 8px rgba(131, 110, 249, 0.0); }
 }
 .pulse-dot {
   width: 10px; height: 10px;
   border-radius: 999px;
-  background: var(--purple);
+  background: var(--green);
   animation: pulse-purple 1.6s ease-out infinite;
 }
 .pulse-dot.muted {
   background: var(--hodl);
   animation: none;
-}
-
-/* Draw-in for the NAV chart line, respects reduced motion. */
-@keyframes draw-in {
-  from { stroke-dashoffset: 1400; }
-  to   { stroke-dashoffset: 0; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .nav-line-draw {
-    stroke-dasharray: 1400;
-    stroke-dashoffset: 1400;
-    animation: draw-in 1.2s ease-out 0.1s forwards;
-  }
 }
 
 /* Focus-visible ring for accessibility. */

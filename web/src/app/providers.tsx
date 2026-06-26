@@ -24,7 +24,7 @@ const queryClient = new QueryClient({
 });
 
 const rkTheme = lightTheme({
-  accentColor: "#6B5CF0",
+  accentColor: "#836EF9",
   accentColorForeground: "#FFFFFF",
   borderRadius: "large",
   fontStack: "system",
@@ -40,7 +40,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             position="top-right"
             richColors
             theme="light"
-            toastOptions={{ style: { fontFamily: "var(--font-jakarta)" } }}
+            toastOptions={{ style: { fontFamily: "var(--font-inter)" } }}
           />
         </RainbowKitProvider>
       </QueryClientProvider>
