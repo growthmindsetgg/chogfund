@@ -2,7 +2,12 @@
 // when a write reverts. Handles both pre-flight simulate errors and on-chain
 // receipts where status==='reverted'.
 //
-// Used by Deposit (approve/deposit) and Dashboard (withdraw).
+// Used by the deposit (approve/deposit) and withdraw (redeemInKind) panels.
+//
+// P8: the P4 AllocatorVault/HardenedVault revert with CUSTOM ERRORS (not P1
+// require-strings). viem decodes them, exposing rev.data.errorName — we match
+// on those names: AgentBlocked, Paused, ZeroShares, InKindOnly,
+// AmountExceedsTracked, plus the ERC20/ERC4626 allowance errors.
 
 import { BaseError, ContractFunctionRevertedError } from "viem";
 
@@ -31,35 +36,46 @@ export function classifyTxError(e: unknown): TxErrorInfo {
     return { kind: "user-rejected", message: "Cancelled in wallet.", raw };
   }
 
-  // 2) Solidity require strings (RebalanceVault).
-  if (/vault:\s*agent blocked|vault:\s*not agent/i.test(raw)) {
+  // 2) P4 custom errors (AllocatorVault / HardenedVault).
+  if (/AgentBlocked|NotAgent|NotAuthorized/i.test(raw)) {
     return {
       kind: "agent-blocked",
       message: "This wallet is the agent and cannot deposit/withdraw.",
       raw,
     };
   }
-  if (/vault:\s*paused/i.test(raw)) {
+  if (/\bPaused\b/i.test(raw)) {
     return {
       kind: "vault-paused",
-      message: "Vault is paused. Withdrawals still work.",
+      message: "Vault is paused. Withdrawals (redeem) still work.",
       raw,
     };
   }
-  if (/vault:\s*zero deposit/i.test(raw)) {
+  if (/ZeroShares/i.test(raw)) {
     return { kind: "zero-deposit", message: "Enter an amount above zero.", raw };
   }
-  if (/vault:\s*price unset/i.test(raw)) {
+  if (/InKindOnly/i.test(raw)) {
+    return {
+      kind: "reverted",
+      message: "Use the in-kind redeem to withdraw (MON + USDC).",
+      raw,
+    };
+  }
+  if (/AmountExceedsTracked/i.test(raw)) {
+    return { kind: "reverted", message: "Amount exceeds the vault's available balance.", raw };
+  }
+  // Stale/low-confidence Pyth price (PythPriceReader guards).
+  if (/NonPositivePrice|ConfidenceTooLow|PriceFeedNotFound|getPriceNoOlderThan|0x19abf40e/i.test(raw)) {
     return {
       kind: "price-unset",
-      message: "Oracle price is not set yet. Try again in a few seconds.",
+      message: "Live price is stale right now. Try again in a few seconds.",
       raw,
     };
   }
 
-  // 3) ERC20 custom error.
+  // 3) ERC20 / ERC4626 allowance.
   // 0xfb8f41b2 = ERC20InsufficientAllowance(address,uint256,uint256)
-  if (raw.includes("0xfb8f41b2") || /InsufficientAllowance/i.test(raw)) {
+  if (raw.includes("0xfb8f41b2") || /InsufficientAllowance|transfer amount exceeds allowance/i.test(raw)) {
     return {
       kind: "insufficient-allowance",
       message: "USDC not approved for the vault. Approve first.",

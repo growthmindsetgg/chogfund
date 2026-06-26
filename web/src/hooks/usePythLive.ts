@@ -1,9 +1,15 @@
 "use client";
 
-// usePythLive — independent browser-side fetch of MON/USD from Pyth Beta
-// Hermes. Used by the header PriceBadge to detect when the on-chain
-// OracleAMM.priceE8() is stale (no pyth-pusher running). NEVER drives NAV
-// directly — NAV is computed from the on-chain priceE8 only.
+// usePythLive — independent browser-side fetch of MON/USD from Pyth Hermes.
+// Used by the header PriceBadge to detect when the on-chain pushed price
+// (PythPriceReader.readPriceE8()) is stale (no pyth-pusher running). NEVER
+// drives NAV directly — NAV is computed from the on-chain priceE8 only.
+//
+// P8 reconciliation: this MUST use the SAME source the contract reads, so the
+// displayed "live" comparison is apples-to-apples with the on-chain price.
+// The P4 PythPriceReader reads the STABLE Pyth contract with feed
+// 0x3149…6cd1, so we fetch the STABLE Hermes endpoint (addresses.pythHermes)
+// for that same feed (addresses.monUsdFeedId) — NOT the beta endpoint/feed.
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -31,7 +37,7 @@ function useVisible(): boolean {
 }
 
 async function fetchMonUsdE8(): Promise<bigint> {
-  const url = new URL("/v2/updates/price/latest", addresses.pythHermesBeta);
+  const url = new URL("/v2/updates/price/latest", addresses.pythHermes);
   url.searchParams.append("ids[]", addresses.monUsdFeedId);
   url.searchParams.set("parsed", "true");
   url.searchParams.set("encoding", "hex");
