@@ -77,6 +77,19 @@ contract NavHandler is SafetyFixture {
         vm.stopPrank();
     }
 
+    // P9: native-MON deposit via the update-then-mint path. The native MON rests in
+    // the vault (independentNav reads address(vault).balance), so the invariant must
+    // still hold across this leg.
+    function depositMon(uint256 amt) public {
+        amt = bound(amt, 1e12, 1e20); // 1e-6 .. 100 MON
+        address a = address(0xB1);
+        bytes[] memory upd = new bytes[](1); upd[0] = hex"00";
+        uint256 fee = reader.getUpdateFee(upd);
+        vm.deal(a, amt + fee);
+        vm.prank(a);
+        try vault.depositMON{value: amt + fee}(upd, a) {} catch {}
+    }
+
     function rebalance(uint256 amt) public {
         uint256 tu = vault.trackedUsdc();
         if (tu < 2e6) return;
@@ -194,7 +207,7 @@ contract AllocatorVaultNavInvariants is Test {
         handler.setUpHandler();
         vault = handler.vault();
 
-        bytes4[] memory sel = new bytes4[](14);
+        bytes4[] memory sel = new bytes4[](15);
         sel[0] = handler.deposit.selector;
         sel[1] = handler.rebalance.selector;
         sel[2] = handler.allocate.selector;
@@ -209,6 +222,7 @@ contract AllocatorVaultNavInvariants is Test {
         sel[11] = handler.accrueLpFees.selector;
         sel[12] = handler.accrueYield.selector;
         sel[13] = handler.redeem.selector;
+        sel[14] = handler.depositMon.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: sel}));
         targetContract(address(handler));
     }
